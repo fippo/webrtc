@@ -33,7 +33,8 @@ function disableSendButton() {
 function createConnection() {
   dataChannelSend.placeholder = '';
   const servers = null;
-  window.localConnection = localConnection = new RTCPeerConnection(servers);
+  const constraints = {optional: [{RtpDataChannels: true}]};
+  window.localConnection = localConnection = new RTCPeerConnection(servers, constraints);
   console.log('Created local peer connection object localConnection');
 
   sendChannel = localConnection.createDataChannel('sendDataChannel');
@@ -45,7 +46,7 @@ function createConnection() {
   sendChannel.onopen = onSendChannelStateChange;
   sendChannel.onclose = onSendChannelStateChange;
 
-  window.remoteConnection = remoteConnection = new RTCPeerConnection(servers);
+  window.remoteConnection = remoteConnection = new RTCPeerConnection(servers, constraints);
   console.log('Created remote peer connection object remoteConnection');
 
   remoteConnection.onicecandidate = e => {
