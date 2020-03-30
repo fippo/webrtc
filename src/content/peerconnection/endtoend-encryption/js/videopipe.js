@@ -23,14 +23,14 @@
 
 function VideoPipe(stream, sendTransform, receiveTransform, handler) {
   this.pc1 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!sendTransform
+    forceEncodedVideoInsertableStreams: true
   });
   this.pc2 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!receiveTransform
+    forceEncodedVideoInsertableStreams: true
   });
 
-  stream.getTracks().forEach(track => this.pc1.addTrack(track, stream));
-  const sender = this.pc1.getSenders().find(s => s.track && s.track.kind === 'video');
+  stream.getTracks().forEach(track => this.pc2.addTrack(track, stream));
+  const sender = this.pc2.getSenders().find(s => s.track && s.track.kind === 'video');
   if (sendTransform) {
     const senderStreams = sender.createEncodedVideoStreams();
     const senderTransformStream = new TransformStream({
@@ -42,7 +42,7 @@ function VideoPipe(stream, sendTransform, receiveTransform, handler) {
         .pipeThrough(senderTransformStream)
         .pipeTo(senderStreams.writableStream);
   }
-  this.pc2.ontrack = e => {
+  this.pc1.ontrack = e => {
     if (receiveTransform) {
       const transform = new TransformStream({
         start() {},
@@ -64,7 +64,7 @@ VideoPipe.prototype.negotiate = async function() {
   this.pc1.onicecandidate = e => this.pc2.addIceCandidate(e.candidate);
   this.pc2.onicecandidate = e => this.pc1.addIceCandidate(e.candidate);
 
-  const offer = await this.pc1.createOffer();
+  const offer = await this.pc1.createOffer({offerToReceiveAudio: true, offerToReceiveVideo: true});
   await this.pc2.setRemoteDescription(offer);
   await this.pc1.setLocalDescription(offer);
 

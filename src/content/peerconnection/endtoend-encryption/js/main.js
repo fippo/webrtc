@@ -95,6 +95,7 @@ function hangup() {
 }
 
 function encodeFunction(chunk, controller) {
+  console.log('encodeFN');
   if (currentCryptoKey) {
     const view = new DataView(chunk.data);
     // Any length that is needed can be used for the new buffer.
@@ -114,6 +115,7 @@ function encodeFunction(chunk, controller) {
 }
 
 function decodeFunction(chunk, controller) {
+  console.log('decodeFN');
   if (currentCryptoKey) {
     const view = new DataView(chunk.data);
     const checksum = view.getUint32(chunk.data.byteLength - 4);
