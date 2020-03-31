@@ -94,7 +94,20 @@ function hangup() {
   callButton.disabled = false;
 }
 
+function dump(data, max = 16) {
+  let bytes = '';
+  for (let j = 0; j < data.length && j < max; j++) {
+    bytes += (data[j] < 16 ? '0' : '') + data[j].toString(16) + ' ';
+  }
+  return bytes.trim();
+}
+
+let scount = 0;
 function encodeFunction(chunk, controller) {
+  if (scount++ < 30) {
+    const data = new Uint8Array(chunk.data);
+    console.log(performance.now().toFixed(2), 'S', dump(data), chunk.data.byteLength, (data[0] & 0x1) === 0);
+  }
   if (currentCryptoKey) {
     const view = new DataView(chunk.data);
     // Any length that is needed can be used for the new buffer.
@@ -113,7 +126,12 @@ function encodeFunction(chunk, controller) {
   controller.enqueue(chunk);
 }
 
+let rcount = 0;
 function decodeFunction(chunk, controller) {
+  if (rcount++ < 30) {
+    const data = new Uint8Array(chunk.data);
+    console.log(performance.now().toFixed(2), 'R', dump(data), chunk.data.byteLength, (data[0] & 0x1) === 0);
+  }
   if (currentCryptoKey) {
     const view = new DataView(chunk.data);
     const checksum = view.getUint32(chunk.data.byteLength - 4);
