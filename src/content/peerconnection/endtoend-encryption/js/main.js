@@ -78,9 +78,11 @@ function call() {
   // packets and listens in, but since we don't have
   // access to raw packets, we just send the same video
   // to both places.
+  /*
   startToMiddle = new VideoPipe(localStream, encodeFunction, null, stream => {
     videoMonitor.srcObject = stream;
   });
+  */
   startToEnd = new VideoPipe(localStream, encodeFunction, decodeFunction,
       gotremoteStream);
   console.log('Video pipes created');
@@ -105,8 +107,10 @@ function dump(data, max = 16) {
 let scount = 0;
 function encodeFunction(chunk, controller) {
   if (scount++ < 30) {
+    /*
     const data = new Uint8Array(chunk.data);
     console.log(performance.now().toFixed(2), 'S', dump(data), chunk.data.byteLength, (data[0] & 0x1) === 0);
+    */
   }
   if (currentCryptoKey) {
     const view = new DataView(chunk.data);
@@ -116,7 +120,7 @@ function encodeFunction(chunk, controller) {
 
     for (let i = 0; i < chunk.data.byteLength; ++i) {
       const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
-      newView.setInt8(i, view.getInt8(i) ^ keyByte);
+      newView.setInt8(i, scount % 0xff);
     }
     // Append checksum
     newView.setUint32(chunk.data.byteLength, 0xDEADBEEF);
