@@ -23,24 +23,31 @@
 
 function VideoPipe(stream, sendTransform, receiveTransform, handler) {
   this.pc1 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!sendTransform
+    forceEncodedVideoInsertableStreams: !!sendTransform,
+    forceEncodedAudioInsertableStreams: !!sendTransform,
   });
   this.pc2 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!receiveTransform
+    forceEncodedVideoInsertableStreams: !!receiveTransform,
+    forceEncodedAudioInsertableStreams: !!receiveTransform,
   });
 
-  const sender = this.pc1.addTrack(stream.getVideoTracks()[0], stream);
-  if (sendTransform) {
-    const senderStreams = sender.createEncodedVideoStreams();
-    const senderTransformStream = new TransformStream({
-      start() {},
-      flush() {},
-      transform: sendTransform
-    });
-    senderStreams.readableStream
-        .pipeThrough(senderTransformStream)
-        .pipeTo(senderStreams.writableStream);
-  }
+  stream.getTracks().forEach((track) => {
+    const sender = this.pc1.addTrack(track, stream);
+    if (sendTransform) {
+      const senderStreams = track.kind === 'video' ?
+        sender.createEncodedVideoStreams() :
+        sender.createEncodedAudioStreams();
+      const senderTransformStream = new TransformStream({
+        start() {},
+        flush() {},
+        transform: sendTransform
+      });
+      senderStreams.readableStream
+          .pipeThrough(senderTransformStream)
+          .pipeTo(senderStreams.writableStream);
+    }
+  });
+
   this.pc2.ontrack = e => {
     if (receiveTransform) {
       const transform = new TransformStream({
@@ -48,7 +55,9 @@ function VideoPipe(stream, sendTransform, receiveTransform, handler) {
         flush() {},
         transform: receiveTransform
       });
-      const receiverStreams = e.receiver.createEncodedVideoStreams();
+      const receiverStreams = e.track.kind === 'video' ?
+        e.receiver.createEncodedVideoStreams() :
+        e.receiver.createEncodedAudioStreams();
       receiverStreams.readableStream
           .pipeThrough(transform)
           .pipeTo(receiverStreams.writableStream);
