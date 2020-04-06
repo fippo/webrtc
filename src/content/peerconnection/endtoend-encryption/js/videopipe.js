@@ -23,11 +23,11 @@
 
 function VideoPipe(stream, sendTransform, receiveTransform, handler) {
   this.pc1 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!sendTransform,
+    forceEncodedVideoInsertableStreams: false,
     forceEncodedAudioInsertableStreams: !!sendTransform,
   });
   this.pc2 = new RTCPeerConnection({
-    forceEncodedVideoInsertableStreams: !!receiveTransform,
+    forceEncodedVideoInsertableStreams: false,
     forceEncodedAudioInsertableStreams: !!receiveTransform,
   });
 

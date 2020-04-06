@@ -64,7 +64,7 @@ function gotremoteStream(stream) {
 function start() {
   console.log('Requesting local stream');
   startButton.disabled = true;
-  const options = {audio: false, video: true};
+  const options = {audio: true, video: false};
   navigator.mediaDevices
       .getUserMedia(options)
       .then(gotStream)
@@ -128,6 +128,7 @@ function encodeFunction(chunk, controller) {
 }
 
 function decodeFunction(chunk, controller) {
+  console.log('decodeFunction', chunk.data.byteLength);
   const view = new DataView(chunk.data);
   const checksum = view.getUint32(chunk.data.byteLength - 4);
   if (currentCryptoKey) {
