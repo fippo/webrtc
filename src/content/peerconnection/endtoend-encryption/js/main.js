@@ -82,9 +82,11 @@ function call() {
   // packets and listens in, but since we don't have
   // access to raw packets, we just send the same video
   // to both places.
+  /*
   startToMiddle = new VideoPipe(localStream, encodeFunction, null, stream => {
     videoMonitor.srcObject = stream;
   });
+  */
   startToEnd = new VideoPipe(localStream, encodeFunction, decodeFunction,
       gotremoteStream);
   console.log('Video pipes created');
@@ -100,12 +102,13 @@ function hangup() {
 
 function encodeFunction(chunk, controller) {
   if (currentCryptoKey) {
+    console.log('encodeFunction', chunk.data.byteLength);
     const view = new DataView(chunk.data);
     // Any length that is needed can be used for the new buffer.
     const newData = new ArrayBuffer(chunk.data.byteLength + 5);
     const newView = new DataView(newData);
 
-    const cryptoOffset = useCryptoOffset? 10 : 0;
+    const cryptoOffset = useCryptoOffset? 6 : 0;
     // If using crypto offset:
     // Do not encrypt the first 10 bytes of the payload. For VP8
     // this is the content described in
@@ -128,9 +131,9 @@ function encodeFunction(chunk, controller) {
 }
 
 function decodeFunction(chunk, controller) {
-  console.log('decodeFunction', chunk.data.byteLength);
   const view = new DataView(chunk.data);
   const checksum = view.getUint32(chunk.data.byteLength - 4);
+  /*
   if (currentCryptoKey) {
     if (checksum !== 0xDEADBEEF) {
       console.log('Corrupted frame received, checksum ' +
@@ -158,6 +161,7 @@ function decodeFunction(chunk, controller) {
   } else if (checksum === 0xDEADBEEF) {
     return; // encrypted in-flight frame but we already forgot about the key.
   }
+  */
   controller.enqueue(chunk);
 }
 

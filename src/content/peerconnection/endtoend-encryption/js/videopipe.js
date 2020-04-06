@@ -28,7 +28,7 @@ function VideoPipe(stream, sendTransform, receiveTransform, handler) {
   });
   this.pc2 = new RTCPeerConnection({
     forceEncodedVideoInsertableStreams: false,
-    forceEncodedAudioInsertableStreams: !!receiveTransform,
+    forceEncodedAudioInsertableStreams: false,
   });
 
   stream.getTracks().forEach((track) => {
@@ -49,6 +49,7 @@ function VideoPipe(stream, sendTransform, receiveTransform, handler) {
   });
 
   this.pc2.ontrack = e => {
+    /*
     if (receiveTransform) {
       const transform = new TransformStream({
         start() {},
@@ -62,6 +63,7 @@ function VideoPipe(stream, sendTransform, receiveTransform, handler) {
           .pipeThrough(transform)
           .pipeTo(receiverStreams.writableStream);
     }
+    */
     handler(e.streams[0]);
   };
 
