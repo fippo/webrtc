@@ -70,7 +70,7 @@ function call() {
   callButton.disabled = true;
   codecSelector.disabled = true;
   console.log('Starting call');
-  const servers = null;
+  const servers = {forceEncodedVideoInsertableStreams: true};
   pc1 = new RTCPeerConnection(servers);
   console.log('Created local peer connection object pc1');
   pc1.onicecandidate = e => onIceCandidate(pc1, e);
