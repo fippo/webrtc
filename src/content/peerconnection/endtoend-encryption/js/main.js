@@ -82,9 +82,11 @@ function call() {
   // packets and listens in, but since we don't have
   // access to raw packets, we just send the same video
   // to both places.
+  /*
   startToMiddle = new VideoPipe(localStream, encodeFunction, null, stream => {
     videoMonitor.srcObject = stream;
   });
+  */
   startToEnd = new VideoPipe(localStream, encodeFunction, decodeFunction,
       gotremoteStream);
   console.log('Video pipes created');
@@ -130,7 +132,7 @@ function encodeFunction(chunk, controller) {
 function decodeFunction(chunk, controller) {
   const view = new DataView(chunk.data);
   const checksum = view.getUint32(chunk.data.byteLength - 4);
-  console.log('RECV TYPE', chunk.type);
+  console.log('RECV TYPE', chunk.type, (view.getUint8(0) & 0x1) === 0 ? 'byte-keyframe' : 'byte-interframe', '0x' + view.getUint8(0).toString(16));
   if (currentCryptoKey) {
     if (checksum !== 0xDEADBEEF) {
       console.log('Corrupted frame received, checksum ' +
