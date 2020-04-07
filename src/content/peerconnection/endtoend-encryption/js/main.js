@@ -130,6 +130,7 @@ function encodeFunction(chunk, controller) {
 function decodeFunction(chunk, controller) {
   const view = new DataView(chunk.data);
   const checksum = view.getUint32(chunk.data.byteLength - 4);
+  console.log('RECV TYPE', chunk.type);
   if (currentCryptoKey) {
     if (checksum !== 0xDEADBEEF) {
       console.log('Corrupted frame received, checksum ' +
