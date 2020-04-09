@@ -69,7 +69,7 @@ function gotremoteStream(stream) {
 function start() {
   console.log('Requesting local stream');
   startButton.disabled = true;
-  const options = {audio: true, video: true};
+  const options = {audio: true, video: false};
   navigator.mediaDevices
       .getUserMedia(options)
       .then(gotStream)
@@ -87,9 +87,11 @@ function call() {
   // packets and listens in, but since we don't have
   // access to raw packets, we just send the same video
   // to both places.
+  /*
   startToMiddle = new VideoPipe(localStream, encodeFunction, null, stream => {
     videoMonitor.srcObject = stream;
   });
+  */
   startToEnd = new VideoPipe(localStream, encodeFunction, decodeFunction,
       gotremoteStream);
   console.log('Video pipes created');
@@ -109,7 +111,7 @@ function dump(chunk, direction, max = 16) {
   for (let j = 0; j < data.length && j < max; j++) {
     bytes += (data[j] < 16 ? '0' : '') + data[j].toString(16) + ' ';
   }
-  console.log(performance.now().toFixed(2), direction, bytes.trim(), chunk.data.byteLength, (data[0] & 0x1) === 0);
+  console.log(performance.now().toFixed(2), direction, bytes.trim(), chunk.data.byteLength, (data[0] & 0x1) === 0, 'ts=' + chunk.timestamp);
 }
 
 // If using crypto offset (controlled by a checkbox):
@@ -131,7 +133,7 @@ const frameTypeToCryptoOffset = {
 
 let scount = 0;
 function encodeFunction(chunk, controller) {
-  if (scount++ < 30) { // dump the first 30 packets.
+  if (1 || scount++ < 30) { // dump the first 30 packets.
     dump(chunk, 'send');
   }
   if (currentCryptoKey) {
@@ -160,8 +162,11 @@ function encodeFunction(chunk, controller) {
 
 let rcount = 0;
 function decodeFunction(chunk, controller) {
-  if (rcount++ < 30) { // dump the first 30 packets
+  if (1 || rcount++ < 30) { // dump the first 30 packets
     dump(chunk, 'recv');
+  }
+  if (chunk.data.byteLength < 10) {
+    console.log('SMALL CHUNK', chunk.data.byteLength, chunk.timestamp);
   }
   const view = new DataView(chunk.data);
   const checksum = view.getUint32(chunk.data.byteLength - 4);
