@@ -77,7 +77,7 @@ VideoPipe.prototype.negotiate = async function() {
   await this.pc1.setLocalDescription(offer);
 
   const answer = await this.pc2.createAnswer();
-  await this.pc1.setRemoteDescription(answer);
+  await this.pc1.setRemoteDescription({type: 'answer', sdp: answer.sdp.replace('useinbandfec=1', 'useinbandfec=1;usedtx=1')});
   await this.pc2.setLocalDescription(answer);
 };
 
