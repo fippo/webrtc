@@ -119,6 +119,8 @@ onmessage = async (event) => {
   if (operation === 'encode') {
     const {readableStream, writableStream} = event.data;
     const transformStream = new TransformStream({
+      start: () => { console.log('encode starting'); },
+      flush: () => { console.log('encode flushing'); },
       transform: encodeFunction,
     });
     readableStream
@@ -127,6 +129,8 @@ onmessage = async (event) => {
   } else if (operation === 'decode') {
     const {readableStream, writableStream} = event.data;
     const transformStream = new TransformStream({
+      start: () => { console.log('decode starting'); },
+      flush: () => { console.log('decode flushing'); },
       transform: decodeFunction,
     });
     readableStream
