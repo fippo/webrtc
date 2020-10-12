@@ -147,12 +147,14 @@ function call() {
   // packets and listens in, but since we don't have
   // access to raw packets, we just send the same video
   // to both places.
+  /*
   startToMiddle = new VideoPipe(localStream, true, false, e => {
     // Do not setup the receiver transform.
     videoMonitor.srcObject = e.streams[0];
   });
   startToMiddle.pc1.getSenders().forEach(setupSenderTransform);
   startToMiddle.negotiate();
+  */
 
   startToEnd = new VideoPipe(localStream, true, true, e => {
     setupReceiverTransform(e.receiver);
