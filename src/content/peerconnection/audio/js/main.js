@@ -86,6 +86,108 @@ async function setPtime(ptime) {
   await pc1.setRemoteDescription(desc);
 }
 
+const expectedRedundancy = 2;
+const targetRedundancy = 6;
+let frameBuffer = [];
+function addRedundancy(encodedFrame, controller) {
+  if (encodedFrame.data.byteLength < 4) {
+    controller.enqueue(encodedFrame);
+  }
+  /*
+   * Attempt to parse the RFC 2198 format. This is harder because
+   * past Philipp made the decision to mix opus and red so we
+   * need heuristics. Format reminder:
+   *     0                   1                    2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3  4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |F|   block PT  |  timestamp offset         |   block length    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   0 1 2 3 4 5 6 7
+   +-+-+-+-+-+-+-+-+
+   |0|   Block PT  |
+   +-+-+-+-+-+-+-+-+
+   */
+  const opusPayloadType = 111; // we can assume the Block PT is 111
+  const view = new DataView(encodedFrame.data);
+  const data = new Uint8Array(encodedFrame.data);
+  let headerLength = 0;
+  let totalLength = 0;
+  let redundancy = 0;
+  let lengths = [];
+  while (headerLength < encodedFrame.data.byteLength) {
+    const nextBlock = view.getUint8(headerLength) & 0x80;
+    if (!nextBlock) {
+      // Parse the last block.
+      if ((view.getUint8(headerLength) & 0x7f) !== opusPayloadType) { // Not RED...
+        return controller.enqueue(encodedFrame);
+      }
+      headerLength += 1;
+      break;
+    }
+    redundancy++;
+    const blockPayloadType = view.getUint8(headerLength) & 0x7f;
+    if (blockPayloadType !== opusPayloadType) { // Not RED.
+      return controller.enqueue(encodedFrame);
+    }
+    const tsOffset = view.getUint16(headerLength + 1) >> 2;
+    if (tsOffset % 960 !== 0) { // Not RED.
+      return controller.enqueue(encodedFrame);
+    }
+    const length = view.getUint16(headerLength + 2) & 0x3ff;
+    lengths.push(length);
+    totalLength += length;
+    headerLength += 4;
+  }
+  if (headerLength + totalLength > encodedFrame.data.byteLength) { // Not RED.
+    return controller.enqueue(encodedFrame);
+  }
+  const frames = [];
+  let frameOffset = headerLength;
+  while(lengths.length) {
+    const length = lengths.shift();
+    const frame = data.slice(frameOffset, frameOffset + length);
+    frames.push(frame);
+    frameOffset += length;
+  }
+  frames.push(data.slice(frameOffset));
+  // frames starts with oldest frame, shift out oldest frames.
+  while(frames.length > targetRedundancy - redundancy) {
+    frames.shift();
+  }
+
+  // Now we try to be smart (what can possibly go wrong???).
+  // We make some assumptions here for the sake of simplicify such as
+  // a timestamp difference of 960.
+  const allFrames = frameBuffer.concat(frames);
+  const needLength = (allFrames.length - 1) * 4 + 1 + allFrames.reduce((total, frame) => total + frame.byteLength, 0);
+  const newData = new Uint8Array(needLength);
+  const newView = new DataView(newData.buffer);
+  let tOffset = 960 * (allFrames.length - 1);
+  // Construct the header.
+  frameOffset = 0;
+  for (let i = 0; i < allFrames.length - 1; i++) {
+    const frame = allFrames[i];
+    newView.setUint8(frameOffset, opusPayloadType | 0x80);
+    newView.setUint16(frameOffset + 1, (tOffset << 2) ^ (frame.byteLength >> 8));
+    newView.setUint8(frameOffset + 3, frame.byteLength & 0xff);
+    frameOffset += 4;
+    tOffset -= 960;
+  }
+  // Last block header.
+  newView.setUint8(frameOffset++, opusPayloadType);
+
+  // Construct the frame.
+  for (let i = 0; i < allFrames.length; i++) {
+    const frame = allFrames[i];
+    newData.set(frame, frameOffset);
+    frameOffset += frame.byteLength;
+  }
+  encodedFrame.data = newData.buffer;
+
+  frameBuffer = frames;
+  controller.enqueue(encodedFrame);
+}
+
 function gotStream(stream) {
   hangupButton.disabled = false;
   console.log('Received local stream');
@@ -95,7 +197,13 @@ function gotStream(stream) {
     console.log(`Using Audio device: ${audioTracks[0].label}`);
   }
   localStream.getTracks().forEach(track => pc1.addTrack(track, localStream));
-  console.log('Adding Local Stream to peer connection');
+  pc1.getSenders().forEach(sender => {
+    const streams = sender.createEncodedStreams();
+    (streams.readable || streams.readableStream).pipeThrough(new TransformStream({
+      transform: addRedundancy, 
+    }))
+    .pipeTo(streams.writableStream);
+  });
 
   if (supportsSetCodecPreferences) {
     const preferredCodec = codecPreferences.options[codecPreferences.selectedIndex];
@@ -141,22 +249,20 @@ function call() {
   callButton.disabled = true;
   codecSelector.disabled = true;
   console.log('Starting call');
-  const servers = null;
-  pc1 = new RTCPeerConnection(servers);
+  pc1 = new RTCPeerConnection({encodedInsertableStreams: true});
   console.log('Created local peer connection object pc1');
   pc1.onicecandidate = e => onIceCandidate(pc1, e);
-  pc2 = new RTCPeerConnection(servers);
+  pc2 = new RTCPeerConnection();
   console.log('Created remote peer connection object pc2');
   pc2.onicecandidate = e => onIceCandidate(pc2, e);
   pc2.ontrack = gotRemoteStream;
   console.log('Requesting local stream');
   navigator.mediaDevices
       .getUserMedia({
-        audio: true,
+        audio: {channelCount: 1},
         video: false
       })
-      .then(gotStream)
-      .catch(e => {
+      .then(gotStream, e => {
         alert(`getUserMedia() error: ${e.name}`);
       });
 }
