@@ -86,9 +86,11 @@ async function setPtime(ptime) {
   await pc1.setRemoteDescription(desc);
 }
 
-const expectedRedundancy = 2;
-const targetRedundancy = 6;
-let frameBuffer = [];
+// desired level of redudancy. 4 means "four redundant frames plus current frame.
+// It is possible to reduce this to 1 (which is below the native redundancy of 2).
+// Note: when changing also realloc frameBuffer.
+const targetRedundancy = 2;
+let frameBuffer = new Array(targetRedundancy);
 function addRedundancy(encodedFrame, controller) {
   if (encodedFrame.data.byteLength < 4) {
     controller.enqueue(encodedFrame);
@@ -149,16 +151,16 @@ function addRedundancy(encodedFrame, controller) {
     frames.push(frame);
     frameOffset += length;
   }
-  frames.push(data.slice(frameOffset));
-  // frames starts with oldest frame, shift out oldest frames.
-  while(frames.length > targetRedundancy - redundancy) {
-    frames.shift();
-  }
+  // frames is mostly used for logging now. TODO: Remove, we only need the current frame.
+  const newFrame = data.slice(frameOffset);
+  frames.push(newFrame);
 
   // Now we try to be smart (what can possibly go wrong???).
   // We make some assumptions here for the sake of simplicify such as
   // a timestamp difference of 960.
-  const allFrames = frameBuffer.concat(frames);
+  const allFrames = frameBuffer.filter(x => !!x).concat(newFrame);
+  //console.log('ALL', allFrames.map(f => f[1]));
+
   const needLength = (allFrames.length - 1) * 4 + 1 + allFrames.reduce((total, frame) => total + frame.byteLength, 0);
   const newData = new Uint8Array(needLength);
   const newView = new DataView(newData.buffer);
@@ -179,12 +181,16 @@ function addRedundancy(encodedFrame, controller) {
   // Construct the frame.
   for (let i = 0; i < allFrames.length; i++) {
     const frame = allFrames[i];
+    //console.log('SUBFRAME', i, new Uint8Array(frame)[1]);
     newData.set(frame, frameOffset);
     frameOffset += frame.byteLength;
   }
+  //console.log('number of frames in the packet', allFrames.length, 'input', frames.length);
   encodedFrame.data = newData.buffer;
 
-  frameBuffer = frames;
+  frameBuffer.shift();
+  frameBuffer.push(newFrame);
+
   controller.enqueue(encodedFrame);
 }
 
