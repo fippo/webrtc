@@ -26,7 +26,7 @@ localVideo.addEventListener('loadedmetadata', function() {
 });
 
 remoteVideo.addEventListener('loadedmetadata', function() {
-  console.log(`Remote video videoWidth: ${this.videoWidth}px,  videoHeight: ${this.videoHeight}px`);
+  console.log(Date.now(), `Remote video videoWidth: ${this.videoWidth}px,  videoHeight: ${this.videoHeight}px`);
 });
 
 remoteVideo.addEventListener('resize', () => {
