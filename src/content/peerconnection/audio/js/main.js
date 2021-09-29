@@ -163,7 +163,8 @@ function call() {
 
 function gotDescription1(desc) {
   console.log(`Offer from pc1\n${desc.sdp}`);
-  pc1.setLocalDescription(desc)
+  const sdp = desc.sdp.replace('useinbandfec=1','useinbandfec=1;stereo=1');
+  pc1.setLocalDescription({type: desc.type, sdp})
       .then(() => {
         if (!supportsSetCodecPreferences) {
           desc.sdp = forceChosenAudioCodec(desc.sdp);
@@ -176,7 +177,9 @@ function gotDescription1(desc) {
 
 function gotDescription2(desc) {
   console.log(`Answer from pc2\n${desc.sdp}`);
-  pc2.setLocalDescription(desc).then(() => {
+  const sdp = desc.sdp.replace('useinbandfec=1','useinbandfec=1;stereo=1');
+  pc2.setLocalDescription({type: desc.type, sdp})
+  .then(() => {
     if (!supportsSetCodecPreferences) {
       desc.sdp = forceChosenAudioCodec(desc.sdp);
     }
