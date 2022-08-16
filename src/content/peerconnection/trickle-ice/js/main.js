@@ -257,6 +257,7 @@ function iceCallback(event) {
     appendCell(row, candidate.sdpMid);
     appendCell(row, candidate.sdpMLineIndex);
     appendCell(row, candidate.usernameFragment);
+    appendCell(row, candidate.relayProtocol);
     candidates.push(candidate);
   }
   candidateTBody.appendChild(row);
