@@ -45,7 +45,7 @@ let remoteStream;
 let preferredAudioCodecMimeType = 'audio/opus';
 // Use VP8 by default to limit depacketization issues.
 // eslint-disable-next-line prefer-const
-let preferredVideoCodecMimeType = 'video/VP8';
+let preferredVideoCodecMimeType = 'video/H264';
 
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
@@ -94,7 +94,7 @@ function gotRemoteStream(stream) {
 function start() {
   console.log('Requesting local stream');
   startButton.disabled = true;
-  const options = {audio: true, video: true};
+  const options = {audio: false, video: true};
   navigator.mediaDevices
       .getUserMedia(options)
       .then(gotStream)
@@ -185,7 +185,7 @@ function call() {
     videoMonitor.srcObject = e.streams[0];
   });
   startToMiddle.pc1.getSenders().forEach(setupSenderTransform);
-  startToMiddle.negotiate();
+  //startToMiddle.negotiate();
 
   startToEnd = new VideoPipe(localStream, true, true, e => {
     setupReceiverTransform(e.receiver);
@@ -209,7 +209,7 @@ function hangup() {
 function setCryptoKey(event) {
   console.log('Setting crypto key to ' + cryptoKey.value);
   const currentCryptoKey = cryptoKey.value;
-  const useCryptoOffset = !cryptoOffsetBox.checked;
+  const useCryptoOffset = cryptoOffsetBox.checked;
   if (currentCryptoKey) {
     banner.innerText = 'Encryption is ON';
   } else {

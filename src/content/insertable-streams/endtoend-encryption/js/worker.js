@@ -13,28 +13,34 @@
 
 'use strict';
 let currentCryptoKey;
-let useCryptoOffset = true;
+let useCryptoOffset = true; // Must match checkbox.
 let currentKeyIdentifier = 0;
 
 // If using crypto offset (controlled by a checkbox):
-// Do not encrypt the first couple of bytes of the payload. This allows
-// a middle to determine video keyframes or the opus mode being used.
+// For VP8 do not encrypt the first couple of bytes of the payload. This allows
+// a middle to determine video keyframes.
 // For VP8 this is the content described in
 //   https://tools.ietf.org/html/rfc6386#section-9.1
 // which is 10 bytes for key frames and 3 bytes for delta frames.
 // For opus (where encodedFrame.type is not set) this is the TOC byte from
 //   https://tools.ietf.org/html/rfc6716#section-3.1
+// For H264 this is a series of annex-b NAL uints separated by start codes.
+// See e.g. https://www.cardinalpeak.com/blog/the-h-264-sequence-parameter-set
 // TODO: make this work for other codecs.
-//
+
 // It makes the (encrypted) video and audio much more fun to watch and listen to
 // as the decoder does not immediately throw a fatal error.
-const frameTypeToCryptoOffset = {
-  key: 10,
-  delta: 3,
-  undefined: 1,
+const frameTypeToCryptoOffset= {
+  'video/VP8': {
+    key: 10,
+    delta: 3,
+  },
+  'audio/opus': {
+    undefined: 1,
+  },
 };
 
-function dump(encodedFrame, direction, max = 16) {
+function dump(encodedFrame, direction, max = 64) {
   const data = new Uint8Array(encodedFrame.data);
   let bytes = '';
   for (let j = 0; j < data.length && j < max; j++) {
@@ -53,23 +59,62 @@ function dump(encodedFrame, direction, max = 16) {
 
 let scount = 0;
 function encodeFunction(encodedFrame, controller) {
-  if (scount++ < 30) { // dump the first 30 packets.
+  if (scount++ < 1) { // dump the first 30 packets.
     dump(encodedFrame, 'send');
   }
+  const metadata = encodedFrame.getMetadata();
   if (currentCryptoKey) {
     const view = new DataView(encodedFrame.data);
     // Any length that is needed can be used for the new buffer.
     const newData = new ArrayBuffer(encodedFrame.data.byteLength + 5);
     const newView = new DataView(newData);
 
-    const cryptoOffset = useCryptoOffset? frameTypeToCryptoOffset[encodedFrame.type] : 0;
-    for (let i = 0; i < cryptoOffset && i < encodedFrame.data.byteLength; ++i) {
-      newView.setInt8(i, view.getInt8(i));
-    }
-    // This is a bitwise xor of the key with the payload. This is not strong encryption, just a demo.
-    for (let i = cryptoOffset; i < encodedFrame.data.byteLength; ++i) {
-      const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
-      newView.setInt8(i, view.getInt8(i) ^ keyByte);
+    const {mimeType} = encodedFrame.getMetadata();
+    const cryptoOffset = useCryptoOffset && frameTypeToCryptoOffset[mimeType]
+      ? frameTypeToCryptoOffset[mimeType][encodedFrame.type]
+      : 0;
+    if (useCryptoOffset && mimeType === 'video/H264') {
+      for (let i = 0; i < encodedFrame.data.byteLength; ++i) {
+        // Search for start codes 00 00 00 01 which are followed by the NAL type.
+        if (i < encodedFrame.data.byteLength - 5 && view.getUint32(i) == 0x00000001) {
+          console.log('NAL FOUND AT', i);
+          const nalType = view.getUint8(i + 4) & 0b1111;
+          if (encodedFrame.type === 'key') console.log(i, nalType, [0x07, 0x08].includes(nalType));
+          for (let j = 0; j < 5; ++j) {
+            newView.setInt8(i + j, view.getInt8(i + j));
+          }
+          i += 4;
+          if ([0x07, 0x08].includes(nalType)) { // Skip SPS/PPS.
+            console.log('skip', nalType, i, encodedFrame.data.byteLength);
+            for (let j = i; j < encodedFrame.data.byteLength; j++) {
+              if (j < encodedFrame.data.byteLength - 4 && view.getUint32(j) === 0x00000001) {
+                i = j - 1;
+                console.log('NEXT IS', j);
+                break;
+              }
+              newView.setInt8(j, view.getInt8(j));
+            }
+          } else if (nalType === 0x05) { // Skip first byte of IDR
+            i++;
+            newView.setInt8(i, view.getInt8(i));
+            i++
+            newView.setInt8(i, view.getInt8(i));
+          }
+          continue;
+        }
+        const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+        newView.setInt8(i, view.getInt8(i) ^ keyByte);
+      }
+    } else {
+      // This is a bitwise xor of the key with the payload. This is not strong encryption, just a demo.
+      for (let i = 0; i < cryptoOffset && i < encodedFrame.data.byteLength; ++i) {
+        newView.setInt8(i, view.getInt8(i));
+      }
+
+      for (let i = cryptoOffset; i < encodedFrame.data.byteLength; ++i) {
+        const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+        newView.setInt8(i, view.getInt8(i) ^ keyByte);
+      }
     }
     // Append keyIdentifier.
     newView.setUint8(encodedFrame.data.byteLength, currentKeyIdentifier % 0xff);
@@ -77,13 +122,14 @@ function encodeFunction(encodedFrame, controller) {
     newView.setUint32(encodedFrame.data.byteLength + 1, 0xDEADBEEF);
 
     encodedFrame.data = newData;
+    if (encodedFrame.type === 'key') dump(encodedFrame, 's264', 128);
   }
   controller.enqueue(encodedFrame);
 }
 
 let rcount = 0;
 function decodeFunction(encodedFrame, controller) {
-  if (rcount++ < 30) { // dump the first 30 packets
+  if (rcount++ < 1) { // dump the first 30 packets
     dump(encodedFrame, 'recv');
   }
   const view = new DataView(encodedFrame.data);
@@ -102,19 +148,53 @@ function decodeFunction(encodedFrame, controller) {
 
     const newData = new ArrayBuffer(encodedFrame.data.byteLength - 5);
     const newView = new DataView(newData);
-    const cryptoOffset = useCryptoOffset? frameTypeToCryptoOffset[encodedFrame.type] : 0;
+    const {mimeType} = encodedFrame.getMetadata();
+    const cryptoOffset = useCryptoOffset && frameTypeToCryptoOffset[mimeType] ? frameTypeToCryptoOffset[mimeType][encodedFrame.type] : 0;
 
-    for (let i = 0; i < cryptoOffset; ++i) {
-      newView.setInt8(i, view.getInt8(i));
-    }
-    for (let i = cryptoOffset; i < encodedFrame.data.byteLength - 5; ++i) {
-      const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
-      newView.setInt8(i, view.getInt8(i) ^ keyByte);
+    if (useCryptoOffset && mimeType === 'video/H264') {
+      for (let i = 0; i < encodedFrame.data.byteLength - 5; ++i) {
+        // Search for start codes 00 00 00 01 which are followed by the NAL type.
+        if (i < encodedFrame.data.byteLength - 5 - 4 && view.getUint32(i) == 0x00000001) {
+          const nalType = view.getUint8(i + 4) & 0b1111;
+          if (encodedFrame.type === 'key') console.log(i, nalType, [0x07, 0x08].includes(nalType));
+          for (let j = 0; j < 5; ++j) {
+            newView.setInt8(i + j, view.getInt8(i + j));
+          }
+          i += 4;
+          if ([0x07, 0x08].includes(nalType)) {
+            // Skip SPS/PPS.
+            for (let j = i; j < encodedFrame.data.byteLength - 5; j++) {
+              if (j < encodedFrame.data.byteLength - 5 - 4 && view.getUint32(j) === 0x00000001) {
+                i = j - 1;
+                break;
+              }
+              newView.setInt8(j, view.getInt8(j));
+            }
+          } else if (nalType === 0x05) { // Skip first two bytes for IDR
+            i++;
+            newView.setInt8(i, view.getInt8(i));
+            i++
+            newView.setInt8(i, view.getInt8(i));
+          }
+          continue;
+        }
+        const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+        newView.setInt8(i, view.getInt8(i) ^ keyByte);
+      }
+    } else {
+      for (let i = 0; i < cryptoOffset; ++i) {
+        newView.setInt8(i, view.getInt8(i));
+      }
+      for (let i = cryptoOffset; i < encodedFrame.data.byteLength - 5; ++i) {
+        const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+        newView.setInt8(i, view.getInt8(i) ^ keyByte);
+      }
     }
     encodedFrame.data = newData;
   } else if (checksum === 0xDEADBEEF) {
     return; // encrypted in-flight frame but we already forgot about the key.
   }
+  if (encodedFrame.type === 'key') dump(encodedFrame, 'd264', 128);
   controller.enqueue(encodedFrame);
 }
 
