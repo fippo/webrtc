@@ -94,7 +94,7 @@ function gotRemoteStream(stream) {
 function start() {
   console.log('Requesting local stream');
   startButton.disabled = true;
-  const options = {audio: false, video: true};
+  const options = {audio: true, video: true};
   navigator.mediaDevices
       .getUserMedia(options)
       .then(gotStream)
@@ -185,7 +185,7 @@ function call() {
     videoMonitor.srcObject = e.streams[0];
   });
   startToMiddle.pc1.getSenders().forEach(setupSenderTransform);
-  //startToMiddle.negotiate();
+  startToMiddle.negotiate();
 
   startToEnd = new VideoPipe(localStream, true, true, e => {
     setupReceiverTransform(e.receiver);

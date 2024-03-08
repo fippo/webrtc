@@ -13,7 +13,7 @@
 
 'use strict';
 let currentCryptoKey;
-let useCryptoOffset = true; // Must match checkbox.
+let useCryptoOffset = false; // Must match checkbox.
 let currentKeyIdentifier = 0;
 
 // If using crypto offset (controlled by a checkbox):
@@ -40,7 +40,7 @@ const frameTypeToCryptoOffset= {
   },
 };
 
-function dump(encodedFrame, direction, max = 64) {
+function dump(encodedFrame, direction, max = 16) {
   const data = new Uint8Array(encodedFrame.data);
   let bytes = '';
   for (let j = 0; j < data.length && j < max; j++) {
@@ -59,7 +59,7 @@ function dump(encodedFrame, direction, max = 64) {
 
 let scount = 0;
 function encodeFunction(encodedFrame, controller) {
-  if (scount++ < 1) { // dump the first 30 packets.
+  if (scount++ < 30) { // dump the first 30 packets.
     dump(encodedFrame, 'send');
   }
   const metadata = encodedFrame.getMetadata();
@@ -74,27 +74,25 @@ function encodeFunction(encodedFrame, controller) {
       ? frameTypeToCryptoOffset[mimeType][encodedFrame.type]
       : 0;
     if (useCryptoOffset && mimeType === 'video/H264') {
+      // H264 is in annex-b format which means startcodes which must not be encrypted.
+      // TODO: the encryption might yield something that looks like a startcode...
       for (let i = 0; i < encodedFrame.data.byteLength; ++i) {
         // Search for start codes 00 00 00 01 which are followed by the NAL type.
         if (i < encodedFrame.data.byteLength - 5 && view.getUint32(i) == 0x00000001) {
-          console.log('NAL FOUND AT', i);
           const nalType = view.getUint8(i + 4) & 0b1111;
-          if (encodedFrame.type === 'key') console.log(i, nalType, [0x07, 0x08].includes(nalType));
           for (let j = 0; j < 5; ++j) {
             newView.setInt8(i + j, view.getInt8(i + j));
           }
           i += 4;
           if ([0x07, 0x08].includes(nalType)) { // Skip SPS/PPS.
-            console.log('skip', nalType, i, encodedFrame.data.byteLength);
             for (let j = i; j < encodedFrame.data.byteLength; j++) {
               if (j < encodedFrame.data.byteLength - 4 && view.getUint32(j) === 0x00000001) {
                 i = j - 1;
-                console.log('NEXT IS', j);
                 break;
               }
               newView.setInt8(j, view.getInt8(j));
             }
-          } else if (nalType === 0x05) { // Skip first byte of IDR
+          } else if (nalType === 0x05) { // Skip first two byte of IDR
             i++;
             newView.setInt8(i, view.getInt8(i));
             i++
@@ -107,6 +105,7 @@ function encodeFunction(encodedFrame, controller) {
       }
     } else {
       // This is a bitwise xor of the key with the payload. This is not strong encryption, just a demo.
+      // For VP8 and opus a fixed number of bytes in the beginning does not need to be encrypted.
       for (let i = 0; i < cryptoOffset && i < encodedFrame.data.byteLength; ++i) {
         newView.setInt8(i, view.getInt8(i));
       }
@@ -122,14 +121,13 @@ function encodeFunction(encodedFrame, controller) {
     newView.setUint32(encodedFrame.data.byteLength + 1, 0xDEADBEEF);
 
     encodedFrame.data = newData;
-    if (encodedFrame.type === 'key') dump(encodedFrame, 's264', 128);
   }
   controller.enqueue(encodedFrame);
 }
 
 let rcount = 0;
 function decodeFunction(encodedFrame, controller) {
-  if (rcount++ < 1) { // dump the first 30 packets
+  if (rcount++ < 30) { // dump the first 30 packets
     dump(encodedFrame, 'recv');
   }
   const view = new DataView(encodedFrame.data);
@@ -156,7 +154,6 @@ function decodeFunction(encodedFrame, controller) {
         // Search for start codes 00 00 00 01 which are followed by the NAL type.
         if (i < encodedFrame.data.byteLength - 5 - 4 && view.getUint32(i) == 0x00000001) {
           const nalType = view.getUint8(i + 4) & 0b1111;
-          if (encodedFrame.type === 'key') console.log(i, nalType, [0x07, 0x08].includes(nalType));
           for (let j = 0; j < 5; ++j) {
             newView.setInt8(i + j, view.getInt8(i + j));
           }
