@@ -12,6 +12,21 @@ const chrome = require('selenium-webdriver/chrome');
 const firefox = require('selenium-webdriver/firefox');
 const safari = require('selenium-webdriver/safari');
 
+const puppeteerBrowsers = require('@puppeteer/browsers');
+
+async function download(browser, version, cacheDir, platform) {
+  const buildId = await puppeteerBrowsers
+    .resolveBuildId(browser, platform, version);
+  await puppeteerBrowsers.install({
+    browser,
+    buildId,
+    cacheDir,
+    platform
+  });
+  return buildId;
+}
+const cacheDir = process.cwd() + '/browsers';
+
 if (os.platform() === 'win32') {
   process.env.PATH += ';' + process.cwd() + '\\node_modules\\chromedriver\\lib\\chromedriver\\';
   process.env.PATH += ';' + process.cwd() + '\\node_modules\\geckodriver';
@@ -19,7 +34,21 @@ if (os.platform() === 'win32') {
   process.env.PATH += ':node_modules/.bin';
 }
 
-function buildDriver(browser = process.env.BROWSER || 'chrome', options = {version: process.env.BVER}) {
+async function buildDriver(browser = process.env.BROWSER || 'chrome', options = {version: process.env.BVER}) {
+  const platform = puppeteerBrowsers.detectBrowserPlatform();
+
+  if (browser === 'firefox' && !process.env.FIREFOX_BIN) {
+    const buildId = await download(browser, process.env.BVER || 'stable',
+      cacheDir, platform);
+    process.env.FIREFOX_BIN = puppeteerBrowsers
+      .computeExecutablePath({browser, buildId, cacheDir, platform});
+  } else if (browser === 'chrome' && !process.env.CHROME_BIN) {
+    const buildId = await download(browser, process.env.BVER || 'stable',
+      cacheDir, platform);
+    process.env.CHROME_BIN = puppeteerBrowsers
+      .computeExecutablePath({browser, buildId, cacheDir, platform});
+  }
+
   // Chrome options.
   const chromeOptions = new chrome.Options()
       .addArguments('allow-insecure-localhost')
