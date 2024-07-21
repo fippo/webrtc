@@ -79,7 +79,7 @@ function encodeFunction(encodedFrame, controller) {
       for (let i = 0; i < encodedFrame.data.byteLength; ++i) {
         // Search for start codes 00 00 00 01 which are followed by the NAL type.
         if (i < encodedFrame.data.byteLength - 5 && view.getUint32(i) == 0x00000001) {
-          const nalType = view.getUint8(i + 4) & 0b1111;
+          const nalType = view.getUint8(i + 4) & 0x1f;
           for (let j = 0; j < 5; ++j) {
             newView.setInt8(i + j, view.getInt8(i + j));
           }
@@ -153,7 +153,7 @@ function decodeFunction(encodedFrame, controller) {
       for (let i = 0; i < encodedFrame.data.byteLength - 5; ++i) {
         // Search for start codes 00 00 00 01 which are followed by the NAL type.
         if (i < encodedFrame.data.byteLength - 5 - 4 && view.getUint32(i) == 0x00000001) {
-          const nalType = view.getUint8(i + 4) & 0b1111;
+          const nalType = view.getUint8(i + 4) & 0x1f;
           for (let j = 0; j < 5; ++j) {
             newView.setInt8(i + j, view.getInt8(i + j));
           }
